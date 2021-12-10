@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 
-from flask import Flask
-from flask import render_template
+from flask import Flask, render_template, Blueprint, jsonify
 from bluepy import btle
 import sys
 import time
@@ -193,7 +192,28 @@ def moveWait(service,desired):
 # path, and return the appropriate value (the current setting, or what it did).
 ###############################################################################
 
+errors = Blueprint('errors', __name__)
+
+@errors.app_errorhandler(Exception)
+def handle_unexpected_error(error):
+        status_code = 500
+        success = False
+        response = {
+                'success': False,
+                'error': {
+                        'type': 'UnhandledException',
+                        'message': str(error)
+                }
+        }
+
+        return jsonify(response), status_code
+
 app = Flask(__name__)
+
+from app.errors import errors
+app.register_blueprint(errors)
+
+
 
 # For the main API page, present a brief help message on usage.
 # The html is stored in a "templates" directory in the same location as
