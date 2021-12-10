@@ -1,0 +1,17 @@
+[Unit]
+Description=Reverie Powerbase
+Wants=network-online.target
+After=syslog.target network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/pi/src/reverie-powerbase/
+EnvironmentFile=/etc/default/reverie-powerbase
+ExecStart=/home/pi/src/reverie-powerbase/reverie.py
+Restart=always
+RestartSec=3
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
