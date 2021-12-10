@@ -10,6 +10,8 @@ import math
 ###############################################################################
 #
 # Reverie Powerbase Control API - Scott Garrett
+# 
+# Version 20211210-001
 #
 # This is a fork based on the Flask Purple Powerbase project by Jacob Byerline
 # https://github.com/jbyerline/flask-purple-powerbase
@@ -34,6 +36,8 @@ import math
 # sometimes when I adjust the foot massage, the head massage will randomly
 # start).  Using light dimmers is not the best way.  If I can find a better
 # integration method on the homebridge side, I will update accordingly.
+#
+# This is also my very first python program.
 # 
 ###############################################################################
 
@@ -126,39 +130,15 @@ def MakePosition(position):
 	return "00"+position[0]+position[1]+position[2]+"00000000000000"
 
 def getBedValue(getBedValue):
-	attempt = False
-	while attempt == False:
-		try:
-			check=int.from_bytes(getBedValue.read(), byteorder=sys.byteorder)
-			attempt = True
-		except btle.BTLEInternalError:
-			raise
-		except:
-			pass
-	return str(check)
+	print()
+	#return str(int.from_bytes(getBedValue.read(), byteorder=sys.byteorder))
 
 def setBedPosition(setBedPosition,position):
-	attempt = False
-	while attempt == False:
-		try:
-			setBedPosition.write(bytes.fromhex(MakePosition(position)))
-			attempt = True
-		except btle.BTLEInternalError:
-			raise
-		except:
-			pass
+	setBedPosition.write(bytes.fromhex(MakePosition(position)))
 	return
 
 def setBedValue(setBedValue,percentage):
-	attempt = False
-	while attempt == False:
-		try:
-			setBedValue.write(bytes.fromhex(percent2hex(percentage)))
-			attempt = True
-		except btle.BTLEInternalError:
-			raise
-		except:
-			pass
+	setBedValue.write(bytes.fromhex(percent2hex(percentage)))
 	return
 
 # Convert a percentage (0-100 decimal) to Hex (0x00-0x64 hex)
@@ -195,16 +175,7 @@ def moveWait(service,desired):
 	return int(desired)
 	
 	def readService(service):
-		attempt = False
-		while attempt == False:
-			try:
-				check=int.from_bytes(service.read(), byteorder=sys.byteorder)
-				attempt = True
-			except btle.BTLEInternalError:
-				raise
-			except:
-				pass
-		return check
+		return int.from_bytes(service.read(), byteorder=sys.byteorder)
 
 	check=readService(service)
 	while not math.isclose(check,int(desired),abs_tol=2):
@@ -213,30 +184,6 @@ def moveWait(service,desired):
 		check=readService(service)
 		deadmancheck += 1
 
-# Open a connection to the bed.  This might fail, as the bed has no security and
-# only allows one device connection at a time.  So, for example, if you have used the
-# bed's remote and it hasn't closed its connection yet, this one will fail.  Just
-# re-run until you get a connection.
-
-def openBed(DEVICE_MAC,DEVICE_UUID):
-	connected=False
-	MAXTRIES = 5
-	check = 1
-	while (MAXTRIES >= check and connected == False):
-		try:
-			print("Attempting to connect to "+DEVICE_MAC+" (Try "+str(check)+"/"+str(MAXTRIES)+")")
-			service = btle.Peripheral(DEVICE_MAC, "random").getServiceByUUID(DEVICE_UUID)
-			connected = True
-		except:
-			check += 1
-			time.sleep(5)
-			pass
-
-	if connected == False:
-		print("Error connecting to device "+DEVICE_MAC+" after "+str(MAXTRIES)+" tries.")
-		sys.exit()
-
-	return service
 
 ###############################################################################
 # Web API (flask) event loop definition
@@ -270,20 +217,17 @@ def setFlat():
 	# head, feet, tilt
 	position=FLAT
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
-	# Since the moveWait function will pass through if the
-	# position is already reached, I use all three here so
-	# that it will wait on whichever one takes the longest.
-	#
-	# The 16 means base 16 i.e. hex
+# Since the moveWait function will pass through if the
+# position is already reached, I use all three here so
+# that it will wait on whichever one takes the longest.
+#
+# The 16 means base 16 i.e. hex
 
-		moveWait(PositionHead,int(position[0],16))
-		moveWait(PositionFeet,int(position[1],16))
-		moveWait(PositionTilt,int(position[2],16))
-	except:
-		raise
+	moveWait(PositionHead,int(position[0],16))
+	moveWait(PositionFeet,int(position[1],16))
+	moveWait(PositionTilt,int(position[2],16))
 
 	return 'Position Set to Flat'
 
@@ -294,8 +238,7 @@ def setZeroG():
 	# head, feet, tilt
 	position=ZEROG
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
 	# Since the moveWait function will pass through if the
 	# position is already reached, I use all three here so
@@ -303,11 +246,9 @@ def setZeroG():
 	#
 	# The 16 means base 16 i.e. hex
 
-		moveWait(PositionHead,int(position[0],16))
-		moveWait(PositionFeet,int(position[1],16))
-		moveWait(PositionTilt,int(position[2],16))
-	except:
-		raise
+	moveWait(PositionHead,int(position[0],16))
+	moveWait(PositionFeet,int(position[1],16))
+	moveWait(PositionTilt,int(position[2],16))
 
 	return 'Position Set to zeroG'
 
@@ -318,8 +259,7 @@ def setNoSnore():
 	# head, feet, tilt
 	position=NOSNORE
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 	
 	# Since the moveWait function will pass through if the
 	# position is already reached, I use all three here so
@@ -327,11 +267,9 @@ def setNoSnore():
 	#
 	# The 16 means base 16 i.e. hex
 
-		moveWait(PositionHead,int(position[0],16))
-		moveWait(PositionFeet,int(position[1],16))
-		moveWait(PositionTilt,int(position[2],16))
-	except:
-		raise
+	moveWait(PositionHead,int(position[0],16))
+	moveWait(PositionFeet,int(position[1],16))
+	moveWait(PositionTilt,int(position[2],16))
 
 	return 'Position Set to noSnore'
 
@@ -354,23 +292,15 @@ def setHead(percentage):
 
 	position[0]=percent2hex(percentage)
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
-		moveWait(PositionHead,percentage)
-	except:
-		raise
+	moveWait(PositionHead,percentage)
 
 	return 'Head Position Set to: '+str(percentage)
 
 @app.route("/getHead")
 def getHead():
-	try:
-		check = getBedValue(PositionHead)
-	except:
-		raise
-	return check
-		
+	return getBedValue(PositionHead)
 
 @app.route("/setFeet/<percentage>")
 def setFeet(percentage):
@@ -387,22 +317,15 @@ def setFeet(percentage):
 
 	position[1]=percent2hex(percentage)
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
-		moveWait(PositionFeet,percentage)
-	except:
-		raise
+	moveWait(PositionFeet,percentage)
 
 	return 'Feet Position Set to: '+str(percentage)
 
 @app.route("/getLumbar")
 def getLumbar():
-	try:
-		check = getBedValue(PositionLumbar)
-	except:
-		raise
-	return check
+	return getBedValue(PositionLumbar)
 
 @app.route("/setLumbar/<percentage>")
 def setLumbar(percentage):
@@ -419,22 +342,15 @@ def setLumbar(percentage):
 
 	position[2]=percent2hex(percentage)
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
-		moveWait(PositionLumbar,percentage)
-	except:
-		raise
+	moveWait(PositionLumbar,percentage)
 
 	return 'Lumbar Position Set to: '+str(percentage)
 
 @app.route("/getFeet")
 def getFeet():
-	try:
-		check = getBedValue(PositionFeet)
-	except:
-		raise
-	return check
+	return getBedValue(PositionFeet)
 
 @app.route("/setTilt/<percentage>")
 def setTilt(percentage):
@@ -459,22 +375,15 @@ def setTilt(percentage):
 
 	position[2]=percent2hex(adjusted_percentage)
 
-	try:
-		setBedPosition(PositionBed, position)
+	setBedPosition(PositionBed, position)
 
-		moveWait(PositionTilt, adjusted_percentage)
-	except:
-		raise
+	moveWait(PositionTilt, adjusted_percentage)
 
 	return 'Tilt Set to: '+str(percentage)
 
-
 @app.route("/getTilt")
 def getTilt():
-	try:
-		percentage = int(getBedValue(PositionTilt))
-	except:
-		raise
+	percentage = int(getBedValue(PositionTilt))
 
 	# This reverses the "magic" done earlier to present the percentage so that
 	# when the bed is flat, it will be 50%.
@@ -503,10 +412,7 @@ def setHeadMassage(percentage):
 	# Adjust the percentage to the range 0 - MAX_MASSAGE_SPEED defined at the top
 	adjusted_percentage = round(int(percentage) / 100 * MAX_MASSAGE_SPEED)
 
-	try:
-		setBedValue(MassageHead, adjusted_percentage)
-	except:
-		raise
+	setBedValue(MassageHead, adjusted_percentage)
 	
 	return 'Head Massage Set to: '+str(percentage)
 
@@ -529,22 +435,14 @@ def setFeetMassage(percentage):
 	# Adjust the percentage to the range 0 - MAX_MASSAGE_SPEED defined at the top
 	adjusted_percentage = round(int(percentage) / 100 * MAX_MASSAGE_SPEED)
 	
-	try:
-		setBedValue(MassageFeet, adjusted_percentage)
-	except:
-		raise
+	setBedValue(MassageFeet, adjusted_percentage)
 
 	return 'Feet Massage Set to: '+str(percentage)
 
 @app.route("/getFeetMassage")
 def getFeetMassage():
-	
-	try:
-		# Simply return the massage speed, adjusted for the MAX_MASSAGE_SPEED range
-		check = str(round(int(getBedValue(MassageFeet)) * 100 / MAX_MASSAGE_SPEED))
-	except:
-		raise
-
+	# Simply return the massage speed, adjusted for the MAX_MASSAGE_SPEED range
+	return str(round(int(getBedValue(MassageFeet)) * 100 / MAX_MASSAGE_SPEED))
 
 @app.route("/setWaveMassage/<setting>")
 def setWaveMassage(setting):
@@ -558,28 +456,19 @@ def setWaveMassage(setting):
 	if setting > MAX_WAVES:
 		setting =  MAX_WAVES
 
-	try:
-		setBedValue(MassageWave, setting)
-	except:
-		return
+	setBedValue(MassageWave, setting)
 
 	return 'Wave Massage Set to: '+str(setting)
 
 @app.route("/getWaveMassage")
 def getWaveMassage():
-	try:
-		check = str(getBedValue(MassageWave))
-	except:
-		raise
+	return str(getBedValue(MassageWave))
 
 @app.route("/stopMassage")
 def setStopMassage():
-	try:
-		setBedValue(MassageHead, 0)
-		setBedValue(MassageFeet, 0)
-		setBedValue(MassageWave, 0)
-	except:
-		raise
+	setBedValue(MassageHead, 0)
+	setBedValue(MassageFeet, 0)
+	setBedValue(MassageWave, 0)
 
 	return "All Massages Stopped"
 
@@ -589,31 +478,22 @@ def setStopMassage():
 
 @app.route("/light/on")
 def setLightOn():
-	try:
-		# Must be 64.  All other values are off.
-		setBedValue(Light, 64)
-	except:
-		raise
+	# Must be 64.  All other values are off.
+	setBedValue(Light, 64)
 	return 'Light On'
 
 @app.route("/light/off")
 def setLightOff():
-	try:
-		setBedValue(Light, 0)
-	except:
-		raise
+	setBedValue(Light, 0)
 	return 'Light Off'
 
 @app.route("/light/status")
 def getLightStatus():
-	try:
-		# 0-63 are off, 64 is on
-		if ( int.from_bytes(Light.read(), byteorder=sys.byteorder) == 64):
-			return '1'
-		else:
-			return '0'
-	except:
-		raise
+	# 0-63 are off, 64 is on
+	if ( int.from_bytes(Light.read(), byteorder=sys.byteorder) == 64):
+		return '1'
+	else:
+		return '0'
 
 ###############################################################################
 # Main Program Starts
@@ -627,7 +507,28 @@ if MAX_MASSAGE_SPEED <= 0:
 	
 while True:
 	try:
-		service=openBed(DEVICE_MAC,DEVICE_UUID)
+	
+	# Open a connection to the bed.  This might fail, as the bed has no security and
+	# only allows one device connection at a time.  So, for example, if you have used the
+	# bed's remote and it hasn't closed its connection yet, this one will fail.  Just
+	# re-run until you get a connection.
+
+		connected=False
+		MAXTRIES = 5
+		check = 1
+		while (MAXTRIES >= check and connected == False):
+			try:
+				print("Attempting to connect to "+DEVICE_MAC+" (Try "+str(check)+"/"+str(MAXTRIES)+")")
+				service = btle.Peripheral(DEVICE_MAC, "random").getServiceByUUID(DEVICE_UUID)
+				connected = True
+			except:
+				check += 1
+				time.sleep(5)
+				pass
+
+		if connected == False:
+			print("Error connecting to device "+DEVICE_MAC+" after "+str(MAXTRIES)+" tries.")
+			sys.exit()
 
 		# This is a list of the services by UUID to controlling the bed
 
@@ -678,10 +579,10 @@ while True:
 			app.run(host=RPI_LOCAL_IP, port=RPI_LISTEN_PORT, debug=False)
 
 	except btle.BTLEDisconnectError:
-			print("Connection to bed lost.  Reconnecting...")
+		print("Connection to bed lost.  Reconnecting...")
 
 	except btle.BTLEInternalError:
-			print("Connection to bed lost.  Reconnecting...")
+		print("Connection to bed lost.  Reconnecting...")
 
 	except:
 		print(sys.exc_info())
