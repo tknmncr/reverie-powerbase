@@ -210,7 +210,6 @@ def handle_unexpected_error(error):
 
 app = Flask(__name__)
 
-from app.errors import errors
 app.register_blueprint(errors)
 
 
