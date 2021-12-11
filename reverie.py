@@ -13,7 +13,7 @@ import signal
 #
 # Reverie Powerbase Control API - Scott Garrett
 # 
-# Version 20211210-002
+# Version 20211211-001
 #
 # This is a fork based on the Flask Purple Powerbase project by Jacob Byerline
 # https://github.com/jbyerline/flask-purple-powerbase
