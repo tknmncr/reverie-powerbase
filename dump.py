@@ -20,28 +20,41 @@ def dump(obj):
        if hasattr( obj, attr ):
            print( "obj.%s (type = %s) = %s" % (attr, type(attr), getattr(obj, attr)))
 
-dump(dev.getServices())
 
-sys.exit()
+# Device c8:d0:76:dd:c8:90 (random), RSSI=-67 dB
+# 	 Flags = 06
+# 	 Complete 128b Services = db801000-f324-29c3-38d1-85c0c2e86885
+# 	 Complete Local Name = RevCB_A1
+	 
+for svc in dev.services:
+	try:
+		print(str(svc.uuid))
 
-#dump(dev)
-#print()
-#dump(service)
-#print()
+		#sys.exit()
 
-service = dev.getServiceByUUID(DEVICE_UUID)
+		#dump(dev)
+		#print()
+		#dump(service)
+		#print()
 
+		service = dev.getServiceByUUID(svc.uuid)
 
-for i in service.getCharacteristics():
-	#print(dir(i))
-	#print(i.peripheral.getServices())
-	#print(i)
-	#dump(i)
-	print(i.uuid, i.read().hex())
+		print (str(svc.uuid)[:4])
+		if str(svc.uuid)[:4] != "0000":
+
+			for i in service.getCharacteristics():
+				#print(dir(i))
+				#print(i.peripheral.getServices())
+				#print(i)
+				#dump(i)
+				print(i.uuid, i.read().hex())
+	except:
+		print("Error reading UUID")
+		pass
 
 #print ( service.getCharacteristics(forUUID="db801041-f324-29c3-38d1-85c0c2e86885")[0].read().hex() )
 
-subService = service.getCharacteristics()[12]
+#subService = service.getCharacteristics()[12]
 # 00 [head] [foot] [lumbar/tilt] 00 00 00 00 00 00 00
 # Other octets don't seem to have any function (on my bed)
 # The tilt setting for "flat" is 0x24 

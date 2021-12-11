@@ -1,16 +1,19 @@
 #!/usr/bin/python3
 
-from flask import Flask, render_template, Blueprint, jsonify
+from flask import Flask, render_template
 from bluepy import btle
+from bluepy.btle import Scanner, DefaultDelegate
 import sys
 import time
 import math
+import os
+import signal
 
 ###############################################################################
 #
 # Reverie Powerbase Control API - Scott Garrett
 # 
-# Version 20211210-001
+# Version 20211210-002
 #
 # This is a fork based on the Flask Purple Powerbase project by Jacob Byerline
 # https://github.com/jbyerline/flask-purple-powerbase
@@ -36,7 +39,9 @@ import math
 # start).  Using light dimmers is not the best way.  If I can find a better
 # integration method on the homebridge side, I will update accordingly.
 #
-# This is also my very first python program.
+# This is also my very first python program.  Much thanks to Michael Zappe
+# for his assistance in helping me understand the "python way" and for some
+# of the math magic.
 # 
 ###############################################################################
 
@@ -52,18 +57,20 @@ import math
 #
 ###############################################################################
 
+# The script will attempt to locate and connect to a Reverie Powerbase automatically.
+# If you have more than one, you will need to find the MAC address of the bed you
+# want to use and set DEVICE_MAC to the correct bed.  If you are not sure which
+# is which, pick one and test it.  Repeat until you find the right one.
+#
 # To find your bed, you can use hcitool from the bluez package:
 #
 # hcitool lescan | grep RevCB_A1
 #
 # If you don't find anything, adjust your grep to maybe "Rev" instead (and, of
 # course, make sure the bed has power).
-DEVICE_MAC = "C8:D0:76:DD:C8:90"
 
-# This UUID seems to be the same on all Reverie beds, so you shouldn't need
-# to change it.
-# ++++ Need to write a quick query to get this value in case it's different for someone
-DEVICE_UUID = "db801000-f324-29c3-38d1-85c0c2e86885"
+DEVICE_MAC = "Auto"
+#DEVICE_MAC = "XX:XX:XX:XX:XX:XX"
 
 # If you are going to run this on the same device as homebridge, use 127.0.0.1
 # If you running this on its own device, uncomment 0.0.0.0 to have it listen
@@ -120,6 +127,25 @@ TILT_FLAT=36
 # Function/Service Declarations
 ###############################################################################
 
+def findBed():
+	class ScanDelegate(DefaultDelegate):
+		def __init__(self):
+			DefaultDelegate.__init__(self)
+
+	print("Scanning for Reverie Powerbases...")
+
+	scanner = Scanner().withDelegate(ScanDelegate())
+	devices = scanner.scan(10.0)
+	
+	for device in devices:
+		#print ("Device %s (%s), RSSI=%d dB" % (device.addr, device.addrType, device.rssi))
+		for (adtype, desc, value) in device.getScanData():
+			#print ("	 %s = %s" % (desc, value))
+			if desc == "Complete Local Name" and value == "RevCB_A1":
+				print("Detected Reverie Powerbase: %s" % (device.addr))
+				return device.addr
+	return "None"
+
 # Take the individual position values, and construct the HEX string needed to
 # send the command as one string.
 
@@ -129,8 +155,7 @@ def MakePosition(position):
 	return "00"+position[0]+position[1]+position[2]+"00000000000000"
 
 def getBedValue(getBedValue):
-	print()
-	#return str(int.from_bytes(getBedValue.read(), byteorder=sys.byteorder))
+	return str(int.from_bytes(getBedValue.read(), byteorder=sys.byteorder))
 
 def setBedPosition(setBedPosition,position):
 	setBedPosition.write(bytes.fromhex(MakePosition(position)))
@@ -192,31 +217,15 @@ def moveWait(service,desired):
 # path, and return the appropriate value (the current setting, or what it did).
 ###############################################################################
 
-errors = Blueprint('errors', __name__)
-
-@errors.app_errorhandler(Exception)
-def handle_unexpected_error(error):
-        status_code = 500
-        success = False
-        response = {
-                'success': False,
-                'error': {
-                        'type': 'UnhandledException',
-                        'message': str(error)
-                }
-        }
-
-        return jsonify(response), status_code
-
 app = Flask(__name__)
 
-app.register_blueprint(errors)
 
 
 
-# For the main API page, present a brief help message on usage.
-# The html is stored in a "templates" directory in the same location as
-# this script runs from.
+
+# # For the main API page, present a brief help message on usage.
+# # The html is stored in a "templates" directory in the same location as
+# # this script runs from.
 
 @app.route('/')
 @app.route('/index')
@@ -375,8 +384,6 @@ def getFeet():
 def setTilt(percentage):
 	global position
 
-	# if (p <= 50) [ tilt = 36 * p / 50 } else { tilt = 36 + (p-36) * (p - 50) / 50 }
-
 	# A little "magic" here to frame 50% around the value 36, which is the (decimal)
 	# position of the tilt when the bed is flat.
 	# i.e. 0-50% ranges 0-36, and 51-100% is 37-100.
@@ -518,92 +525,101 @@ def getLightStatus():
 # Main Program Starts
 ###############################################################################
 
+
+if DEVICE_MAC == "Auto":
+	DEVICE_MAC = findBed()
+
+if DEVICE_MAC == "None":
+	print("No Reverie Powerbase found.")
+	sys.exit()
+
 # If this is set to 0 or a negative number(which technically makes no sense), 
 # it will be invalid or cause a divide by zero and explode.
 
 if MAX_MASSAGE_SPEED <= 0:
 	MAX_MASSAGE_SPEED = 1
 	
-while True:
+# Open a connection to the bed.  This might fail, as the bed has no security and
+# only allows one device connection at a time.  So, for example, if you have used the
+# bed's remote and it hasn't closed its connection yet, this one will fail.  Just
+# re-run until you get a connection.
+
+connected=False
+MAXTRIES = 5
+check = 1
+while (MAXTRIES >= check and connected == False):
 	try:
-	
-	# Open a connection to the bed.  This might fail, as the bed has no security and
-	# only allows one device connection at a time.  So, for example, if you have used the
-	# bed's remote and it hasn't closed its connection yet, this one will fail.  Just
-	# re-run until you get a connection.
-
-		connected=False
-		MAXTRIES = 5
-		check = 1
-		while (MAXTRIES >= check and connected == False):
-			try:
-				print("Attempting to connect to "+DEVICE_MAC+" (Try "+str(check)+"/"+str(MAXTRIES)+")")
-				service = btle.Peripheral(DEVICE_MAC, "random").getServiceByUUID(DEVICE_UUID)
-				connected = True
-			except:
-				check += 1
-				time.sleep(5)
-				pass
-
-		if connected == False:
-			print("Error connecting to device "+DEVICE_MAC+" after "+str(MAXTRIES)+" tries.")
-			sys.exit()
-
-		# This is a list of the services by UUID to controlling the bed
-
-		PositionBed=service.getCharacteristics(forUUID="db8010d0-f324-29c3-38d1-85c0c2e86885")[0]
-
-		PositionHead=service.getCharacteristics(forUUID="db801041-f324-29c3-38d1-85c0c2e86885")[0]
-		PositionFeet=service.getCharacteristics(forUUID="db801042-f324-29c3-38d1-85c0c2e86885")[0]
-
-		# You'll notice that Tilt and Lumbar use the same UUID.  This is on purpose.  The 
-		# beds have either tilt or lumbar.  Lumbar (I assume) is a straight 0-100 setting
-		# where you have no lumbar lift to the maximum lift.  Tilt, however is "flat" at 
-		# 36% (raw decimal).  I have logic to convert it to a straight 0-100, where 50% is flat.
-		#
-		# Obviously, use only one function or the other.
-		PositionTilt=service.getCharacteristics(forUUID="db801040-f324-29c3-38d1-85c0c2e86885")[0]
-		PositionLumbar=service.getCharacteristics(forUUID="db801040-f324-29c3-38d1-85c0c2e86885")[0]
-
-		MassageHead=service.getCharacteristics(forUUID="db801061-f324-29c3-38d1-85c0c2e86885")[0]
-		MassageFeet=service.getCharacteristics(forUUID="db801060-f324-29c3-38d1-85c0c2e86885")[0]
-		MassageWave=service.getCharacteristics(forUUID="db801080-f324-29c3-38d1-85c0c2e86885")[0]
-
-		Light=service.getCharacteristics(forUUID="db8010A0-f324-29c3-38d1-85c0c2e86885")[0]
-
-		# Get the current positions of the bed components.	We keep these values
-		# so that when an adjustment of one is changed, the other values can be
-		# maintained and it won't interrupt if you make another change before
-		# the first is finished.  In the functions below, you have to set position
-		# as a global variable so that the changes will persist across events.
-		#
-		# position is defined as a list where [ 0, 1, 2 ] are [ head, feet, tilt ]
-		#
-		# i.e. to get/set the position of the feet would be position[1]
-
-		position=[ PositionHead.read().hex(), PositionFeet.read().hex(), PositionTilt.read().hex() ]
-		
-		if USE_TILT == True:
-			# head, feet, tilt (raw hex values)
-			FLAT=["00", "00", "24"]
-			ZEROG=["1f", "46", "24"]
-			NOSNORE=["0b", "00", "24"]
-		else:
-			# head, feet, lumbar (raw hex values)
-			FLAT=["00", "00", "00"]
-			ZEROG=["1f", "46", "00"]
-			NOSNORE=["0b", "00", "00"]
-
-		if __name__ == '__main__':
-			app.run(host=RPI_LOCAL_IP, port=RPI_LISTEN_PORT, debug=False)
-
-	except btle.BTLEDisconnectError:
-		print("Connection to bed lost.  Reconnecting...")
-
-	except btle.BTLEInternalError:
-		print("Connection to bed lost.  Reconnecting...")
-
+		print("Attempting to connect to "+DEVICE_MAC+" (Try "+str(check)+"/"+str(MAXTRIES)+")")
+		dev = btle.Peripheral(DEVICE_MAC, "random")
+		# Since service UUIDs that begin with 0000 are supposed to be reserved,
+		# I am looking for a UUID that is anything else.  This will assign the
+		# first UUID it finds.  With the Reverie beds, this SHOULD be adequate.
+		for primary in dev.services:
+			if str(primary.uuid)[:4] != "0000":
+				service=dev.getServiceByUUID(primary.uuid)
+		connected = True
 	except:
-		print(sys.exc_info())
-		print("Error starting app. Aborting.")
-		sys.exit()
+		check += 1
+		time.sleep(5)
+		pass
+
+if connected == False:
+	print("Error connecting to device "+DEVICE_MAC+" after "+str(MAXTRIES)+" tries.")
+	sys.exit()
+
+# This is a list of the services by UUID to controlling the bed
+
+PositionBed=service.getCharacteristics(forUUID="db8010d0-f324-29c3-38d1-85c0c2e86885")[0]
+
+PositionHead=service.getCharacteristics(forUUID="db801041-f324-29c3-38d1-85c0c2e86885")[0]
+PositionFeet=service.getCharacteristics(forUUID="db801042-f324-29c3-38d1-85c0c2e86885")[0]
+
+# You'll notice that Tilt and Lumbar use the same UUID.  This is on purpose.  The 
+# beds have either tilt or lumbar.  Lumbar (I assume) is a straight 0-100 setting
+# where you have no lumbar lift to the maximum lift.  Tilt, however is "flat" at 
+# 36% (raw decimal).  I have logic to convert it to a straight 0-100, where 50% is flat.
+#
+# Obviously, use only one function or the other.
+PositionTilt=service.getCharacteristics(forUUID="db801040-f324-29c3-38d1-85c0c2e86885")[0]
+PositionLumbar=service.getCharacteristics(forUUID="db801040-f324-29c3-38d1-85c0c2e86885")[0]
+
+MassageHead=service.getCharacteristics(forUUID="db801061-f324-29c3-38d1-85c0c2e86885")[0]
+MassageFeet=service.getCharacteristics(forUUID="db801060-f324-29c3-38d1-85c0c2e86885")[0]
+MassageWave=service.getCharacteristics(forUUID="db801080-f324-29c3-38d1-85c0c2e86885")[0]
+
+Light=service.getCharacteristics(forUUID="db8010A0-f324-29c3-38d1-85c0c2e86885")[0]
+
+# Get the current positions of the bed components.	We keep these values
+# so that when an adjustment of one is changed, the other values can be
+# maintained and it won't interrupt if you make another change before
+# the first is finished.  In the functions below, you have to set position
+# as a global variable so that the changes will persist across events.
+#
+# position is defined as a list where [ 0, 1, 2 ] are [ head, feet, tilt ]
+#
+# i.e. to get/set the position of the feet would be position[1]
+
+position=[ PositionHead.read().hex(), PositionFeet.read().hex(), PositionTilt.read().hex() ]
+
+if USE_TILT == True:
+	# head, feet, tilt (raw hex values)
+	FLAT=["00", "00", "24"]
+	ZEROG=["1f", "46", "24"]
+	NOSNORE=["0b", "00", "24"]
+else:
+	# head, feet, lumbar (raw hex values)
+	FLAT=["00", "00", "00"]
+	ZEROG=["1f", "46", "00"]
+	NOSNORE=["0b", "00", "00"]
+
+# I haven't yet figured out how to get the exception out of the Flask thread
+# to have it re-connect to the bed.  If it's run as a service, having it kill
+# itself here, systemd will restart it for you.
+@app.errorhandler(Exception)
+def special_exception_handler(error):
+	print("Bluetooth Connection Lost.  Exiting.")
+	os.kill(os.getpid(), getattr(signal, "SIGKILL", signal.SIGTERM))
+	return 'Bluetooth Connection Lost', 500
+
+if __name__ == '__main__':
+	app.run(host=RPI_LOCAL_IP, port=RPI_LISTEN_PORT, debug=False)
