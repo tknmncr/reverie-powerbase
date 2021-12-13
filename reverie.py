@@ -57,10 +57,17 @@ import signal
 #
 ###############################################################################
 
-# The script will attempt to locate and connect to a Reverie Powerbase automatically.
-# If you have more than one, you will need to find the MAC address of the bed you
-# want to use and set DEVICE_MAC to the correct bed.  If you are not sure which
-# is which, pick one and test it.  Repeat until you find the right one.
+###############################################################################
+# These values should be defined in /etc/default/reverie-powerbase.  Systemd
+# will make them available to the script.  I have included some reasonable
+# defaults in case the script is run manually, or nor defined externally.
+###############################################################################
+
+# The script will attempt to locate and connect to a Reverie Powerbase
+# automatically. If you have more than one, you will need to find the MAC
+# address of the bed you want to use and set DEVICE_MAC to the correct bed.  If
+# you are not sure which is which, pick one and test it.  Repeat until you find
+# the right one.
 #
 # To find your bed, you can use hcitool from the bluez package:
 #
@@ -69,19 +76,24 @@ import signal
 # If you don't find anything, adjust your grep to maybe "Rev" instead (and, of
 # course, make sure the bed has power).
 
-DEVICE_MAC = "Auto"
-#DEVICE_MAC = "XX:XX:XX:XX:XX:XX"
+DEVICE_MAC = os.environ.get("DEVICE_MAC", "Auto")
+print("Using device MAC address " + DEVICE_MAC)
 
 # If you are going to run this on the same device as homebridge, use 127.0.0.1
 # If you running this on its own device, uncomment 0.0.0.0 to have it listen
 # on the public interfaces
-RPI_LOCAL_IP = "127.0.0.1"
-#RPI_LOCAL_IP = "0.0.0.0"
+
+RPI_LOCAL_IP = os.environ.get("RPI_LOCAL_IP", "127.0.0.1")
+if RPI_LOCAL_IP == "0.0.0.0":
+	print("Listening interface set to all interfaces.")
+else:
+	print("Listening interface set to " + RPI_LOCAL_IP)
 
 # This is the TCP port that the service will listen on.  You can use any
 # unused port; it just needs to be set to the same one here and in the homebridge
 # plugin.
-RPI_LISTEN_PORT = 8000
+RPI_LISTEN_PORT = os.environ.get("RPI_LISTEN_PORT", "8001")
+print("Listening on port " + RPI_LISTEN_PORT)
 
 # The factory set the fastest massage speed to 40% of what the motor
 # will actually do.  I am using that limit because I don't know if it's
@@ -104,19 +116,26 @@ RPI_LISTEN_PORT = 8000
 # Set here what you want the maximum speed (decimal) of the motor to be.
 # You can increase this at your own risk.  Should be set to any positive 
 # integer value.
-MAX_MASSAGE_SPEED = 40
+MAX_MASSAGE_SPEED = os.environ.get("MAX_MASSAGE_SPEED", 40)
+MAX_MASSAGE_SPEED = int(MAX_MASSAGE_SPEED)
+print("Maximum massage speed set to " + str(MAX_MASSAGE_SPEED))
 
 # My bed has 4 massage wave speeds.  Perhaps some other bases have more.
 # Adjust to match your bed.
-MAX_WAVES=4
+MAX_WAVES = os.environ.get("MAX_WAVES", 4)
+MAX_WAVES = int(MAX_WAVES)
+print("Number of wave settings is " + str(MAX_WAVES))
 
 # If your bed has the tilt function, rather than lumbar support, set this to True.
 # Set to False if you have lumbar adjustment.
-USE_TILT=True
+USE_TILT = os.environ.get("USE_TILT", True)
+print("Using tilt function rather than lumbar: " + str(USE_TILT))
 
 # This is the (decimal) tilt position that reprents when the bed is flat.  On the
 # Reverie R650, flat is 36 (0x24).
-TILT_FLAT=36
+TILT_FLAT = os.environ.get("TILT_FLAT", 36)
+TILT_FLAT = int(TILT_FLAT)
+print("Bed's flat position tilt is " + str(TILT_FLAT))
 
 ###############################################################################
 # End User Config
